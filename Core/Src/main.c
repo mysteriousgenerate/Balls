@@ -62,7 +62,7 @@
 #define PACKET_SIZE 128
 
 #define GATE_WIDTH_M     0.005f
-#define GATE_TO_COIL_M  0.005f
+#define GATE_TO_COIL_M  0.01f
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -95,8 +95,8 @@ float speed_error_prev = 0.0f;
 float speed_integral = 0.0f;
 
 // PID gains (start conservative)
-float Kp = 5.0f;
-float Ki = 0.1f;
+float Kp = 7.0f;
+float Ki = 0.05f;
 float Kd = 0.7f;
 
 // PID output
@@ -465,49 +465,49 @@ int main(void)
 	              gate_done = 0;
 	              HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
 
-	              float gate_time_s = gate_time_us / 1000000.0f;
-	              if(gate_time_s <= 0.0f) gate_time_s = 0.001f;
-	              ball_speed = GATE_WIDTH_M / gate_time_s;
+	              ball_speed = 0.0f;
+	              speed_integral = 0.0f;
+	              speed_error_prev = 0.0f;
 
-	              coil_hold_time_ms = (uint32_t)((0.01f / ball_speed) * 1000.0f * hold_time_scale);
+	              if(gate_time_us == 0) return;
 
-	              //coil_delay_ms = (uint32_t)((GATE_TO_COIL_M / ball_speed) * 50.0f);
+	                  /* ---- Calculate speed ---- */
 
-	              if(ball_speed > target_speed + 0.1f)
-	                  {
-	                      // Too fast — don't fire, let friction slow it down
-	                      delay_active = 0;
-	                      auto_trigger_pending = 0;
-	                      autoPhase = PHASE1;
-	                  }
-	                  else
-	                  {
-	                      // Too slow or on target — fire
-	                      delay_start_time = HAL_GetTick();
-	                      delay_active = 1;
-	                      auto_trigger_pending = 1;
-	                  }
+	                  float gate_time_s = gate_time_us * 1e-6f;
+	                  ball_speed = GATE_WIDTH_M / gate_time_s;
 
-	              // PID scaling for hold time
-	              /*float dt = (now - last_speed_tick) * 0.001f;
-	              if(dt <= 0) dt = 0.001f;
-	              last_speed_tick = now;
-	              speed_error = target_speed - ball_speed;
-	              speed_integral += speed_error * dt;
-	              float derivative = (speed_error - speed_error_prev) / dt;
-	              speed_error_prev = speed_error;
-	              float pid_output = Kp*speed_error + Ki*speed_integral + Kd*derivative;
-	              hold_time_scale = 1.0f + pid_output * 0.01f;
+	                  /* ---- Calculate travel time to coil ---- */
 
-	              coil_hold_time_ms = (uint32_t)(coil_hold_time_ms * hold_time_scale);
+	                  float travel_time_ms = (GATE_TO_COIL_M / ball_speed) * 1000.0f;
 
-	              //if(coil_hold_time_ms < 10) coil_hold_time_ms = 20;
-	              if(coil_hold_time_ms > 80) coil_hold_time_ms = 70;
+	                  /* ---- PID timing correction ---- */
 
-	              // Delay to coil
-	              delay_start_time = HAL_GetTick();
-	              delay_active = 1;
-	              auto_trigger_pending = 1;*/
+	                  float dt = (now - last_speed_tick) * 0.001f;
+	                  if(dt <= 0) dt = 0.001f;
+
+	                  last_speed_tick = now;
+
+	                  speed_error = target_speed - ball_speed;
+	                  speed_integral += speed_error * dt;
+
+	                  float derivative = (speed_error - speed_error_prev) / dt;
+	                  speed_error_prev = speed_error;
+
+	                  float pid_output = Kp*speed_error + Ki*speed_integral + Kd*derivative;
+
+	                  coil_hold_time_ms = (uint32_t)(travel_time_ms + pid_output);
+
+	                  /* ---- Safety clamp ---- */
+
+	                  //if(coil_hold_time_ms < 1) coil_hold_time_ms = 1;
+	                  //if(coil_hold_time_ms > 50) coil_hold_time_ms = 50;
+
+	                  /* ---- Turn coil ON immediately ---- */
+
+	                  autoPhase = PHASE1;
+	                  phase_timer = HAL_GetTick();
+
+	                  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
 
 	              char buf[96];
 	              snprintf(buf, sizeof(buf),
@@ -517,7 +517,7 @@ int main(void)
 	          }
 
 	          // Trigger coil after delay
-	          if(mode_auto && auto_trigger_pending && delay_active)
+	          /*if(mode_auto && auto_trigger_pending && delay_active)
 	          {
 	              if(HAL_GetTick() - delay_start_time >= coil_delay_ms)
 	              {
@@ -528,7 +528,7 @@ int main(void)
 	                  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
 	                  phase_timer = HAL_GetTick();
 	              }
-	          }
+	          }*/
 
 	          // Run auto state machine to drive coil based on measured_current
 	          if(mode_auto)
