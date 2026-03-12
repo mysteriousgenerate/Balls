@@ -1,0 +1,11 @@
+../Core/Src/main.c:173:6:BTS7960_Stop	1
+../Core/Src/main.c:181:6:BTS7960_Forward	3
+../Core/Src/main.c:195:6:BTS7960_Reverse	3
+../Core/Src/main.c:220:6:usbPrint	2
+../Core/Src/main.c:230:6:runAutoStateMachine	8
+../Core/Src/main.c:326:6:HAL_GPIO_EXTI_Callback	5
+../Core/Src/main.c:358:5:main	16
+../Core/Src/main.c:573:6:SystemClock_Config	4
+../Core/Src/main.c:632:6:HAL_ADC_ConvCpltCallback	11
+../Core/Src/main.c:728:6:HAL_SYSTICK_Callback	1
+../Core/Src/main.c:739:6:Error_Handler	1
