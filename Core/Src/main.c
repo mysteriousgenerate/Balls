@@ -50,7 +50,7 @@
 #define ADC_MAX 4095
 #define SENSOR_ZERO 1.670f //1.745f
 #define MV_PER_AMP 0.185f
-#define TARGET_CURRENT 5.0f
+#define TARGET_CURRENT 7.5f
 #define HYST_MAX 0.8f
 #define HYST_MIN 0.5f
 #define PWM_MAX 1800U
@@ -467,7 +467,7 @@ int main(void)
 
 	              ball_speed = 0.0f;
 	              speed_integral = 0.0f;
-	              speed_error_prev = 0.0f;
+	              speed_error = 0.0f;
 
 	              if(gate_time_us == 0) return;
 
@@ -481,19 +481,24 @@ int main(void)
 	                  float travel_time_ms = (GATE_TO_COIL_M / ball_speed) * 1000.0f;
 
 	                  /* ---- PID timing correction ---- */
+	                  uint32_t now_us = __HAL_TIM_GET_COUNTER(&htim2);
+	                  uint32_t dt_us;
 
-	                  float dt = (now - last_speed_tick) * 0.001f;
-	                  if(dt <= 0) dt = 0.001f;
+	                  if (now_us >= last_speed_tick)
+	                      dt_us = now_us - last_speed_tick;
+	                  else
+	                      dt_us = (0xFFFF - last_speed_tick) + now_us + 1;
 
-	                  last_speed_tick = now;
+	                  last_speed_tick = now_us;
+	                  float dt_s = dt_us * 1e-6f;
 
 	                  speed_error = target_speed - ball_speed;
-	                  speed_integral += speed_error * dt;
+	                  speed_integral += speed_error * dt_s;
 
-	                  float derivative = (speed_error - speed_error_prev) / dt;
+	                  float derivative = (speed_error - speed_error_prev) / dt_s;
 	                  speed_error_prev = speed_error;
 
-	                  float pid_output = Kp*speed_error + Ki*speed_integral + Kd*derivative;
+	                  float pid_output = (Kp*speed_error + Ki*speed_integral + Kd*derivative);
 
 	                  coil_hold_time_ms = (uint32_t)(travel_time_ms + pid_output);
 
@@ -511,8 +516,8 @@ int main(void)
 
 	              char buf[96];
 	              snprintf(buf, sizeof(buf),
-	              "Pulse_delay=%lu ms | speed=%.2f m/s | delay=%lu ms\r\n",
-				  coil_hold_time_ms, ball_speed, coil_delay_ms);
+	              "Pulse_delay=%lu ms | speed=%.2f m/s | speed_error=%f \r\n",
+				  coil_hold_time_ms, ball_speed, speed_error_prev);
 	              usbPrint(buf);
 	          }
 
@@ -644,7 +649,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 
     		BTS7960_Forward(100.0f);
 
-    		if(measured_current >= 1.25f)
+    		if(measured_current >= (TARGET_CURRENT - 2.5f))
     			{
     		       phase_timer = now;
     		       autoPhase = PHASE2_HOLD;
