@@ -57,7 +57,7 @@
 #define PWM_MIN 0U
 #define DT 0.00005f
 
-#define ADC_BUF_LEN 16
+#define ADC_BUF_LEN 32
 #define ADC_RAW_TO_VOLTAGE 0.0008058608059
 #define PACKET_SIZE 128
 
@@ -96,7 +96,7 @@ float speed_integral = 0.0f;
 
 // PID gains (start conservative)
 float Kp = 7.0f;
-float Ki = 0.05f;
+float Ki = 0.04f;
 float Kd = 0.7f;
 
 // PID output
@@ -109,6 +109,7 @@ extern uint32_t UserRxLengthFS;
 extern USBD_HandleTypeDef hUsbDeviceFS;
 char inputBuffer[APP_RX_DATA_SIZE];
 uint32_t inputIndex = 0;
+volatile uint8_t usb_ready = 0;
 
 // DMA setup
 volatile uint16_t adc_buf[ADC_BUF_LEN];
@@ -149,7 +150,7 @@ uint16_t current_value;
 float error = 0;
 
 // ---- Tunable gains ----
-float Kp_coil = 0.6f;
+float Kp_coil = 8.7f;
 float Ki_coil = 150.0f;
 
 // ---- Internal states ----
@@ -219,11 +220,11 @@ static inline uint16_t adc_to_millivolts(uint16_t adc)
 
 void usbPrint(const char* msg)
 {
-    uint8_t res;
-    do {
-        res = CDC_Transmit_FS((uint8_t*)msg, strlen(msg));
-        HAL_Delay(1);
-    } while(res == USBD_BUSY);
+
+	    if (hUsbDeviceFS.dev_state != USBD_STATE_CONFIGURED)
+	        return;
+
+	    uint8_t res = CDC_Transmit_FS((uint8_t*)msg, strlen(msg));
 }
 
 
@@ -387,8 +388,8 @@ int main(void)
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
 
-  while(hUsbDeviceFS.dev_state != USBD_STATE_CONFIGURED)
-            HAL_Delay(10);
+  //while(hUsbDeviceFS.dev_state != USBD_STATE_CONFIGURED)
+   //         HAL_Delay(10);
 
   // Start ADC
   if (HAL_ADC_Start_IT(&hadc1) != HAL_OK)
@@ -519,6 +520,7 @@ int main(void)
 	              "Pulse_delay=%lu ms | speed=%.2f m/s | speed_error=%f \r\n",
 				  coil_hold_time_ms, ball_speed, speed_error_prev);
 	              usbPrint(buf);
+
 	          }
 
 	          // Trigger coil after delay
@@ -555,7 +557,7 @@ int main(void)
 	          dma_buffer_full = 0; // reset the flag
 	      }*/
 
-	      /*if(now - last_dma_time >= 100)   // print every 100 ms
+	      /*if (now - last_dma_time >= 100)   // print every 100 ms
 	      {
 	    	  last_dma_time = now;
 
@@ -727,8 +729,6 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
     	}*/
     }
 }
-
-
 
 void HAL_SYSTICK_Callback(void)
 {
