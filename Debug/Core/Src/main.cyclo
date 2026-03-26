@@ -3,9 +3,9 @@
 ../Core/Src/main.c:196:6:BTS7960_Reverse	3
 ../Core/Src/main.c:221:6:usbPrint	2
 ../Core/Src/main.c:231:6:runAutoStateMachine	8
-../Core/Src/main.c:327:6:HAL_GPIO_EXTI_Callback	5
-../Core/Src/main.c:359:5:main	11
-../Core/Src/main.c:580:6:SystemClock_Config	4
-../Core/Src/main.c:639:6:HAL_ADC_ConvCpltCallback	11
-../Core/Src/main.c:733:6:HAL_SYSTICK_Callback	1
-../Core/Src/main.c:744:6:Error_Handler	1
+../Core/Src/main.c:328:6:HAL_GPIO_EXTI_Callback	5
+../Core/Src/main.c:360:5:main	12
+../Core/Src/main.c:578:6:SystemClock_Config	4
+../Core/Src/main.c:637:6:HAL_ADC_ConvCpltCallback	11
+../Core/Src/main.c:731:6:HAL_SYSTICK_Callback	1
+../Core/Src/main.c:742:6:Error_Handler	1

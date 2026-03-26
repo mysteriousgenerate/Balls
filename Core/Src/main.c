@@ -48,9 +48,9 @@
 
 #define VREF 3.3f
 #define ADC_MAX 4095
-#define SENSOR_ZERO 1.670f //1.745f
+#define SENSOR_ZERO 1.670f //1.360f
 #define MV_PER_AMP 0.185f
-#define TARGET_CURRENT 7.5f
+#define TARGET_CURRENT 6.4f //4.9f
 #define HYST_MAX 0.8f
 #define HYST_MIN 0.5f
 #define PWM_MAX 1800U
@@ -97,7 +97,7 @@ float speed_integral = 0.0f;
 // PID gains (start conservative)
 float Kp = 7.0f;
 float Ki = 0.04f;
-float Kd = 0.7f;
+float Kd = 0.1f;
 
 // PID output
 float hold_time_scale = 1.0f;
@@ -140,7 +140,7 @@ volatile uint8_t auto_running = 0;
 
 // Debug options
 volatile uint32_t debug_timer_ms = 0;
-volatile float debug_pwm = 0.0f;
+volatile float debug_pwm = 50.0f;
 uint32_t now;
 uint32_t last_dma_time = 0;
 uint32_t dma_interval_ms = 10000;
@@ -156,7 +156,7 @@ float Ki_coil = 150.0f;
 // ---- Internal states ----
 float integral = 0.0f;
 float filtered_current = 0.0f;
-float alpha = 0.03f;
+float alpha = 0.5f;
 
 /* USER CODE END PV */
 
@@ -294,6 +294,7 @@ void runAutoStateMachine(void)
             {
             	//last_pwm_forward = pwm_forward;
                 autoPhase = PHASE3;
+                HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
             }
         }
         break;
@@ -513,14 +514,11 @@ int main(void)
 	                  autoPhase = PHASE1;
 	                  phase_timer = HAL_GetTick();
 
-	                  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
-
-	              char buf[96];
+	              /*char buf[96];
 	              snprintf(buf, sizeof(buf),
 	              "Pulse_delay=%lu ms | speed=%.2f m/s | speed_error=%f \r\n",
 				  coil_hold_time_ms, ball_speed, speed_error_prev);
-	              usbPrint(buf);
-
+	              usbPrint(buf);*/
 	          }
 
 	          // Trigger coil after delay
@@ -557,7 +555,7 @@ int main(void)
 	          dma_buffer_full = 0; // reset the flag
 	      }*/
 
-	      /*if (now - last_dma_time >= 100)   // print every 100 ms
+	      if (now - last_dma_time >= 100)   // print every 100 ms
 	      {
 	    	  last_dma_time = now;
 
@@ -565,7 +563,7 @@ int main(void)
 	          snprintf(buf, sizeof(buf), "C%.3f\r\n", measured_current);
 	          //snprintf(buf, sizeof(buf), "C%u\r\n", current_value);
 	          usbPrint(buf);
-	      }*/
+	      }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -651,7 +649,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 
     		BTS7960_Forward(100.0f);
 
-    		if(measured_current >= (TARGET_CURRENT - 2.5f))
+    		if(measured_current >= (TARGET_CURRENT - 2.7f))
     			{
     		       phase_timer = now;
     		       autoPhase = PHASE2_HOLD;

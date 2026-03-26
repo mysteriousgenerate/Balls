@@ -3,9 +3,9 @@
 ../Core/Src/main.c:196:6:BTS7960_Reverse	24	static
 ../Core/Src/main.c:221:6:usbPrint	24	static
 ../Core/Src/main.c:231:6:runAutoStateMachine	16	static
-../Core/Src/main.c:327:6:HAL_GPIO_EXTI_Callback	24	static
-../Core/Src/main.c:359:5:main	168	static
-../Core/Src/main.c:580:6:SystemClock_Config	88	static
-../Core/Src/main.c:639:6:HAL_ADC_ConvCpltCallback	40	static
-../Core/Src/main.c:733:6:HAL_SYSTICK_Callback	4	static
-../Core/Src/main.c:744:6:Error_Handler	4	static,ignoring_inline_asm
+../Core/Src/main.c:328:6:HAL_GPIO_EXTI_Callback	24	static
+../Core/Src/main.c:360:5:main	88	static
+../Core/Src/main.c:578:6:SystemClock_Config	88	static
+../Core/Src/main.c:637:6:HAL_ADC_ConvCpltCallback	40	static
+../Core/Src/main.c:731:6:HAL_SYSTICK_Callback	4	static
+../Core/Src/main.c:742:6:Error_Handler	4	static,ignoring_inline_asm
