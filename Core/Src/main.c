@@ -119,6 +119,7 @@ static uint16_t last_mv = 0;
 volatile uint8_t dma_buffer_full = 0;
 
 // Current sensor
+uint16_t current_value;
 volatile float measured_current = 0.0f;
 
 // State
@@ -146,8 +147,10 @@ uint32_t last_dma_time = 0;
 uint32_t dma_interval_ms = 10000;
 uint32_t dma_interval_max = 11000;
 
-uint16_t current_value;
 float error = 0;
+volatile uint32_t direct_measurement = 0;
+volatile float debug_measured_current = 0.0f;
+uint16_t debug_current_value;
 
 // ---- Tunable gains ----
 float Kp_coil = 8.7f;
@@ -239,6 +242,7 @@ void runAutoStateMachine(void)
     {
         case PHASE_IDLE:
             BTS7960_Stop();
+            HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
             //pwm_percent = 0.0f;
             //pwm_forward = 0.0f;
             pwm_reverse = 0.0f;
@@ -294,7 +298,6 @@ void runAutoStateMachine(void)
             {
             	//last_pwm_forward = pwm_forward;
                 autoPhase = PHASE3;
-                HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
             }
         }
         break;
@@ -393,13 +396,13 @@ int main(void)
    //         HAL_Delay(10);
 
   // Start ADC
-  if (HAL_ADC_Start_IT(&hadc1) != HAL_OK)
-  {
-   	 Error_Handler();
-  }
+  //if (HAL_ADC_Start_IT(&hadc1) != HAL_OK)
+  //{
+  // 	 Error_Handler();
+  //}
 
   // DMA ADC setup
-  //HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buf, ADC_BUF_LEN);
+  HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buf, ADC_BUF_LEN);
 
   // Start PWM main counter
   HAL_TIM_Base_Start(&htim1);
@@ -424,7 +427,7 @@ int main(void)
 	  Error_Handler();
   }
 
-  if (HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3) != HAL_OK)
+  if (HAL_TIM_PWM_Start_IT(&htim1, TIM_CHANNEL_3) != HAL_OK)
   {
       Error_Handler();
   }
@@ -455,8 +458,8 @@ int main(void)
 	  	  	  	//debug_pwm += error * 50.0f;
 	          	//BTS7960_Forward(debug_pwm);
 
-	          	//HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, SET); // Toggle PB9 to measure the sampling of the ADC
-	          	//HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, RESET);
+	          	//HAL_GPIO_WritePin(GPIOA, GPIO_PIN_15, SET); // Toggle PB9 to measure the sampling of the ADC
+	          	//HAL_GPIO_WritePin(GPIOA, GPIO_PIN_15, RESET);
 
 	  now = HAL_GetTick();
 
@@ -471,7 +474,7 @@ int main(void)
 	              speed_integral = 0.0f;
 	              speed_error = 0.0f;
 
-	              if(gate_time_us == 0) return;
+	              if(gate_time_us == 0) continue;
 
 	                  /* ---- Calculate speed ---- */
 
@@ -511,6 +514,7 @@ int main(void)
 
 	                  /* ---- Turn coil ON immediately ---- */
 
+	                  HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buf, ADC_BUF_LEN);
 	                  autoPhase = PHASE1;
 	                  phase_timer = HAL_GetTick();
 
@@ -540,7 +544,7 @@ int main(void)
 	              runAutoStateMachine();
 
 
-	      /*if(dma_buffer_full)
+	      if(dma_buffer_full)
 	      {
 	          for(int i = 0; i < ADC_BUF_LEN; i++)
 	          {
@@ -553,9 +557,9 @@ int main(void)
 	          }
 
 	          dma_buffer_full = 0; // reset the flag
-	      }*/
+	      }
 
-	      if (now - last_dma_time >= 100)   // print every 100 ms
+	      /*if (now - last_dma_time >= 100)   // print every 100 ms
 	      {
 	    	  last_dma_time = now;
 
@@ -563,7 +567,7 @@ int main(void)
 	          snprintf(buf, sizeof(buf), "C%.3f\r\n", measured_current);
 	          //snprintf(buf, sizeof(buf), "C%u\r\n", current_value);
 	          usbPrint(buf);
-	      }
+	      }*/
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -640,7 +644,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
     {
     	//HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, SET); // Toggle PB9 to measure the sampling of the ADC
     	//HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, RESET);
-    	current_value = HAL_ADC_GetValue(hadc);
+    	/*current_value = HAL_ADC_GetValue(hadc);
     	float voltage_diff = (current_value * ADC_RAW_TO_VOLTAGE) - SENSOR_ZERO;
     	measured_current = voltage_diff / MV_PER_AMP;
 
@@ -654,6 +658,10 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
     		       phase_timer = now;
     		       autoPhase = PHASE2_HOLD;
     			}
+    		else if ((HAL_GetTick() - phase_timer) >= 1000)
+    		    {
+    		       autoPhase = PHASE_IDLE;
+    		    }
     	}
 
     	if(autoPhase == PHASE2_HOLD)
@@ -706,12 +714,14 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
     	        __HAL_TIM_SET_COMPARE(&htim1,RPWM_CHANNEL, (uint32_t)((pwm_forward / 100.0f) * PWM_MAX));
     	    }*/
 
-    	}
+    	//}
 
     	/*if(now - last_dma_time >= dma_interval_ms)
     	{
-    		last_dma_time = now;
+    		last_dma_time = now;*/
 
+    	if(autoPhase == PHASE1)/// !!!!!!!THIS IS FOR TESTING THE DMA INTERUPT
+    	    	{
     		for (uint8_t index = 0; index < ADC_BUF_LEN; index++)
     		{
     			currentVoltage[index] = ADC_RAW_TO_VOLTAGE * (float) adc_buf[index];
@@ -722,15 +732,72 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
     			dma_buffer_full = 1;
     			HAL_ADC_Stop_DMA(&hadc1);
     			HAL_ADC_Start_IT(&hadc1);
-    			HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buf, ADC_BUF_LEN);
+    			//HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buf, ADC_BUF_LEN);
     		}
-    	}*/
+    	    	}
+    	//}
     }
 }
 
+void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
+{
+    // Filter to ensure this only runs when TIM1 Channel 3 triggers
+    if (htim->Instance == TIM1 && htim->Channel == HAL_TIM_ACTIVE_CHANNEL_3)
+    {
+
+        	//HAL_GPIO_WritePin(GPIOA, GPIO_PIN_15, SET); // Toggle PB9 to measure the sampling of the ADC
+        	//HAL_GPIO_WritePin(GPIOA, GPIO_PIN_15, RESET);
+
+            debug_current_value = ADC1->DR;
+            float voltage_diff = (debug_current_value * ADC_RAW_TO_VOLTAGE) - SENSOR_ZERO;
+            measured_current = voltage_diff / MV_PER_AMP;
+
+            if(autoPhase == PHASE1)
+                	{
+
+                		BTS7960_Forward(100.0f);
+
+                		if(measured_current >= (TARGET_CURRENT - 2.7f))
+                			{
+                		       phase_timer = now;
+                		       autoPhase = PHASE2_HOLD;
+                			}
+                		else if ((HAL_GetTick() - phase_timer) >= 1000)
+                		    {
+                		       autoPhase = PHASE_IDLE;
+                		    }
+                	}
+
+                	if(autoPhase == PHASE2_HOLD)
+                	{
+                		filtered_current += alpha * (measured_current - filtered_current);
+
+                		float error = TARGET_CURRENT - filtered_current;
+
+                		float pwm_unsat = Kp_coil * error + Ki_coil * integral;
+
+                		    if (
+                		        (pwm_unsat < PWM_MAX && pwm_unsat > PWM_MIN) ||
+                		        (pwm_unsat >= PWM_MAX && error < 0) ||
+                		        (pwm_unsat <= PWM_MIN && error > 0)
+                		       )
+                		    {
+                		        integral += error * DT;
+                		    }
+
+                		    pwm_forward = Kp_coil * error + Ki_coil * integral;
+
+                		    BTS7960_Forward(pwm_forward);
+                	}
+
+
+    }
+}
+
+
 void HAL_SYSTICK_Callback(void)
 {
-    debug_timer_ms++;
+
 }
 
 /* USER CODE END 4 */
