@@ -57,7 +57,7 @@
 #define PWM_MIN 0U
 #define DT 0.00005f
 
-#define ADC_BUF_LEN 32
+#define ADC_BUF_LEN 64
 #define ADC_RAW_TO_VOLTAGE 0.0008058608059
 #define PACKET_SIZE 128
 
@@ -110,6 +110,7 @@ extern USBD_HandleTypeDef hUsbDeviceFS;
 char inputBuffer[APP_RX_DATA_SIZE];
 uint32_t inputIndex = 0;
 volatile uint8_t usb_ready = 0;
+volatile uint8_t send_adc_data = 0;
 
 // DMA setup
 volatile uint16_t adc_buf[ADC_BUF_LEN];
@@ -313,6 +314,7 @@ void runAutoStateMachine(void)
             {
                 BTS7960_Stop();
                 phase_timer = now;
+                send_adc_data = 1;
                 autoPhase = PHASE_IDLE;
             }
             break;
@@ -396,13 +398,13 @@ int main(void)
    //         HAL_Delay(10);
 
   // Start ADC
-  //if (HAL_ADC_Start_IT(&hadc1) != HAL_OK)
-  //{
-  // 	 Error_Handler();
-  //}
+  if (HAL_ADC_Start_IT(&hadc1) != HAL_OK)
+  {
+   	 Error_Handler();
+  }
 
   // DMA ADC setup
-  HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buf, ADC_BUF_LEN);
+  //HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buf, ADC_BUF_LEN);
 
   // Start PWM main counter
   HAL_TIM_Base_Start(&htim1);
@@ -470,6 +472,9 @@ int main(void)
 	              gate_done = 0;
 	              HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
 
+	              HAL_ADC_Stop_IT(&hadc1);
+	              HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buf, ADC_BUF_LEN);
+
 	              ball_speed = 0.0f;
 	              speed_integral = 0.0f;
 	              speed_error = 0.0f;
@@ -513,8 +518,6 @@ int main(void)
 	                  //if(coil_hold_time_ms > 50) coil_hold_time_ms = 50;
 
 	                  /* ---- Turn coil ON immediately ---- */
-
-	                  HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buf, ADC_BUF_LEN);
 	                  autoPhase = PHASE1;
 	                  phase_timer = HAL_GetTick();
 
@@ -544,20 +547,34 @@ int main(void)
 	              runAutoStateMachine();
 
 
-	      if(dma_buffer_full)
-	      {
-	          for(int i = 0; i < ADC_BUF_LEN; i++)
+	          if(dma_buffer_full && send_adc_data)
 	          {
-	              uint16_t mv = adc_to_millivolts(adc_buf[i]);
-	              char buf[16];
-	              snprintf(buf, sizeof(buf), "C%u\r\n", mv);
-	              usbPrint(buf);
+	              static char usb_tx_buffer[512];
+	              int usb_tx_length = 0;
 
-	              HAL_Delay(1); // slow USB transfer
+	              for (int sample_index = 0; sample_index < ADC_BUF_LEN; sample_index++)
+	              {
+	                  uint16_t millivolts = adc_to_millivolts(adc_buf[sample_index]);
+
+	                  usb_tx_length += snprintf(&usb_tx_buffer[usb_tx_length],
+	                                            sizeof(usb_tx_buffer) - usb_tx_length,
+	                                            "C%u,", millivolts);
+
+	                  if (usb_tx_length >= sizeof(usb_tx_buffer))
+	                      break; // prevent overflow
+	              }
+
+	              if (usb_tx_length > 0)
+	              {
+	                  usb_tx_buffer[usb_tx_length - 1] = '\r';
+	                  usb_tx_buffer[usb_tx_length++] = '\n';
+	              }
+
+	              usbPrint(usb_tx_buffer);
+
+	              dma_buffer_full = 0; // reset flag
+	              send_adc_data = 0;
 	          }
-
-	          dma_buffer_full = 0; // reset the flag
-	      }
 
 	      /*if (now - last_dma_time >= 100)   // print every 100 ms
 	      {
@@ -642,6 +659,15 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 {
     if(hadc->Instance == ADC1)
     {
+    	// 1. Stop DMA (only once!)
+    	HAL_ADC_Stop_DMA(hadc);
+
+    	// 2. Mark buffer ready
+    	dma_buffer_full = 1;
+
+    	// 3. Restart ADC in interrupt mode
+    	HAL_ADC_Start_IT(hadc);
+
     	//HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, SET); // Toggle PB9 to measure the sampling of the ADC
     	//HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, RESET);
     	/*current_value = HAL_ADC_GetValue(hadc);
@@ -718,10 +744,9 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 
     	/*if(now - last_dma_time >= dma_interval_ms)
     	{
-    		last_dma_time = now;*/
+    		last_dma_time = now;
 
-    	if(autoPhase == PHASE1)/// !!!!!!!THIS IS FOR TESTING THE DMA INTERUPT
-    	    	{
+    	/// !!!!!!!THIS IS FOR TESTING THE DMA INTERUPT
     		for (uint8_t index = 0; index < ADC_BUF_LEN; index++)
     		{
     			currentVoltage[index] = ADC_RAW_TO_VOLTAGE * (float) adc_buf[index];
@@ -734,14 +759,14 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
     			HAL_ADC_Start_IT(&hadc1);
     			//HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buf, ADC_BUF_LEN);
     		}
-    	    	}
-    	//}
+
+    	}*/
     }
 }
 
 void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
 {
-    // Filter to ensure this only runs when TIM1 Channel 3 triggers
+    // Runs when TIM1 Channel 3 triggers - 20kHz loop
     if (htim->Instance == TIM1 && htim->Channel == HAL_TIM_ACTIVE_CHANNEL_3)
     {
 

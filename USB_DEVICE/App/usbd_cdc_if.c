@@ -22,8 +22,8 @@
 #include "usbd_cdc_if.h"
 
 /* USER CODE BEGIN INCLUDE */
-#define APP_RX_DATA_SIZE 64
-#define APP_TX_DATA_SIZE 64
+#define APP_RX_DATA_SIZE 1024
+#define APP_TX_DATA_SIZE 1024
 
 uint8_t UserRxLengthFS = 0;
 /* USER CODE END INCLUDE */
