@@ -40,17 +40,18 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define RPWM_CHANNEL TIM_CHANNEL_1
-#define LPWM_CHANNEL TIM_CHANNEL_2
-#define R_EN_PIN GPIO_PIN_0
-#define L_EN_PIN GPIO_PIN_1
-#define EN_PORT GPIOB
+#define RPWM_CHANNEL TIM_CHANNEL_2
+#define LPWM_CHANNEL TIM_CHANNEL_1
+#define R_EN_PIN GPIO_PIN_10
+#define L_EN_PIN GPIO_PIN_15
+#define R_EN_PORT GPIOA
+#define L_EN_PORT GPIOB
 
 #define VREF 3.3f
 #define ADC_MAX 4095
 #define SENSOR_ZERO 1.670f //1.360f
 #define MV_PER_AMP 0.185f
-#define TARGET_CURRENT 6.4f //4.9f
+#define TARGET_CURRENT 6.4f //5.9f
 #define HYST_MAX 0.8f
 #define HYST_MIN 0.5f
 #define PWM_MAX 1800U
@@ -177,7 +178,8 @@ void SystemClock_Config(void);
 /* Stop both PWMs (coast) */
 void BTS7960_Stop(void)
 {
-	HAL_GPIO_WritePin(EN_PORT, R_EN_PIN | L_EN_PIN, GPIO_PIN_RESET);
+	HAL_GPIO_WritePin(R_EN_PORT, R_EN_PIN, GPIO_PIN_RESET);
+	HAL_GPIO_WritePin(L_EN_PORT, L_EN_PIN, GPIO_PIN_RESET);
     __HAL_TIM_SET_COMPARE(&htim1, RPWM_CHANNEL, 0);
     __HAL_TIM_SET_COMPARE(&htim1, LPWM_CHANNEL, 0);
 }
@@ -190,7 +192,8 @@ void BTS7960_Forward(float percent)
 
     uint32_t val = (uint32_t)((percent / 100.0f) * (float)PWM_MAX);
 
-    HAL_GPIO_WritePin(EN_PORT, R_EN_PIN | L_EN_PIN, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(R_EN_PORT, R_EN_PIN, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(L_EN_PORT, L_EN_PIN, GPIO_PIN_SET);
 
     __HAL_TIM_SET_COMPARE(&htim1, RPWM_CHANNEL, val);
     __HAL_TIM_SET_COMPARE(&htim1, LPWM_CHANNEL, 0);
@@ -204,7 +207,8 @@ void BTS7960_Reverse(float percent)
 
     uint32_t val = (uint32_t)((percent / 100.0f) * (float)PWM_MAX);
 
-    HAL_GPIO_WritePin(EN_PORT, R_EN_PIN | L_EN_PIN, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(R_EN_PORT, R_EN_PIN, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(L_EN_PORT, L_EN_PIN, GPIO_PIN_SET);
 
     __HAL_TIM_SET_COMPARE(&htim1, RPWM_CHANNEL, 0);
     __HAL_TIM_SET_COMPARE(&htim1, LPWM_CHANNEL, val);
@@ -521,11 +525,11 @@ int main(void)
 	                  autoPhase = PHASE1;
 	                  phase_timer = HAL_GetTick();
 
-	              /*char buf[96];
+	              char buf[96];
 	              snprintf(buf, sizeof(buf),
 	              "Pulse_delay=%lu ms | speed=%.2f m/s | speed_error=%f \r\n",
 				  coil_hold_time_ms, ball_speed, speed_error_prev);
-	              usbPrint(buf);*/
+	              usbPrint(buf);
 	          }
 
 	          // Trigger coil after delay
