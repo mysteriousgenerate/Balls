@@ -173,6 +173,8 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+void DEBUG_FixedPWM(float *error, volatile float *debug_pwm, float measured_current);
+
 /* ---------------- BTS7960 helper functions ---------------- */
 
 /* Stop both PWMs (coast) */
@@ -214,12 +216,12 @@ void BTS7960_Reverse(float percent)
     __HAL_TIM_SET_COMPARE(&htim1, LPWM_CHANNEL, val);
 }
 
-/*void process_adc_buffer(void)
+void process_adc_buffer(void)
 {
 	uint16_t raw = adc_buf[ADC_BUF_LEN-1];
 	float voltage = ((float)raw * VREF) / ADC_MAX;
 	measured_current = (voltage - SENSOR_ZERO) * 1000.0f / MV_PER_AMP;
-}*/
+}
 
 static inline uint16_t adc_to_millivolts(uint16_t adc)
 {
@@ -248,60 +250,19 @@ void runAutoStateMachine(void)
         case PHASE_IDLE:
             BTS7960_Stop();
             HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
-            //pwm_percent = 0.0f;
-            //pwm_forward = 0.0f;
             pwm_reverse = 0.0f;
             break;
 
         case PHASE1:
-            //pwm_forward = 100.0f;
-        	/*if(last_pwm_forward > 0.0f)
-        	{
-        		BTS7960_Forward(last_pwm_forward);
-        	}
-        	else
-        	{
-        		BTS7960_Forward(pwm_forward);
-        	}*/
 
             pwm_reverse = 0.0f;
-            //BTS7960_Reverse(pwm_reverse);
-
-            //autoPhase = PHASE2_HOLD;
-            //if(phase_timer == 0) phase_timer = now;
-
-            /*if (current >= TARGET_CURRENT || (now - phase_timer) >= 4)
-            {
-            	phase_timer = now;
-                autoPhase = PHASE2_HOLD;
-            }*/
             break;
 
         case PHASE2_HOLD:
         {
-        	//float error = TARGET_CURRENT - current;
-        	//pwm_forward += error * 50.0f;
-        	//if (pwm_forward > 100) pwm_forward = 100;
-        	//if (pwm_forward < 0) pwm_forward = 0;
-        	//BTS7960_Forward(pwm_forward);
-
-        	/*if(current <= TARGET_CURRENT + HYST_MIN)
-        	{
-        		float error = (TARGET_CURRENT + HYST_MIN) - current;
-        		pwm_forward += error * 250.0f;
-        		BTS7960_Forward(pwm_forward);
-        	}
-
-        	if(current >= TARGET_CURRENT + HYST_MAX)
-        	{
-        		float error = (TARGET_CURRENT + HYST_MAX) - current;
-        		pwm_forward += error * 250.0f;
-        		BTS7960_Forward(pwm_forward);
-        	}*/
 
             if (now - phase_timer >= coil_hold_time_ms)
             {
-            	//last_pwm_forward = pwm_forward;
                 autoPhase = PHASE3;
             }
         }
@@ -311,8 +272,6 @@ void runAutoStateMachine(void)
             pwm_reverse = 100.0f;
             BTS7960_Reverse(pwm_reverse);
 
-            //pwm_forward = 0.0f;
-            //BTS7960_Forward(pwm_forward);
 
             if (current <= 1.75f) //All fixed variables must change under different curcumpstances
             {
@@ -322,15 +281,6 @@ void runAutoStateMachine(void)
                 autoPhase = PHASE_IDLE;
             }
             break;
-
-        /*case PHASE3_WAIT:
-            if (fabs(current) <= 0.05f)
-            {
-                BTS7960_Stop();
-                autoPhase = PHASE_IDLE;
-                auto_running = 0; // optional: leave 1 if you want continuous cycling
-            }
-            break;*/
     }
 }
 
@@ -453,20 +403,8 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-
-	  // Drive motor forward at fixed PWM
-	      //BTS7960_Forward(debug_pwm);
-	      //usbPrint("Starting live current read. Press 'e' to stop.\r\n");
-
-	      //process_adc_buffer();
-
-	  	  	  	//error = TARGET_CURRENT - measured_current;
-	  	  	  	//debug_pwm += error * 50.0f;
-	          	//BTS7960_Forward(debug_pwm);
-
-	          	//HAL_GPIO_WritePin(GPIOA, GPIO_PIN_15, SET); // Toggle PB9 to measure the sampling of the ADC
-	          	//HAL_GPIO_WritePin(GPIOA, GPIO_PIN_15, RESET);
-
+	//! New Debug Function:
+    DEBUG_FixedPWM(&error, &debug_pwm, measured_current);
 	  now = HAL_GetTick();
 
 
@@ -516,11 +454,6 @@ int main(void)
 
 	                  coil_hold_time_ms = (uint32_t)(travel_time_ms + pid_output);
 
-	                  /* ---- Safety clamp ---- */
-
-	                  //if(coil_hold_time_ms < 1) coil_hold_time_ms = 1;
-	                  //if(coil_hold_time_ms > 50) coil_hold_time_ms = 50;
-
 	                  /* ---- Turn coil ON immediately ---- */
 	                  autoPhase = PHASE1;
 	                  phase_timer = HAL_GetTick();
@@ -532,19 +465,6 @@ int main(void)
 	              usbPrint(buf);
 	          }
 
-	          // Trigger coil after delay
-	          /*if(mode_auto && auto_trigger_pending && delay_active)
-	          {
-	              if(HAL_GetTick() - delay_start_time >= coil_delay_ms)
-	              {
-	                  delay_active = 0;
-	                  auto_trigger_pending = 0;
-	                  auto_running = 1;
-	                  autoPhase = PHASE1;
-	                  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
-	                  phase_timer = HAL_GetTick();
-	              }
-	          }*/
 
 	          // Run auto state machine to drive coil based on measured_current
 	          if(mode_auto)
@@ -579,7 +499,7 @@ int main(void)
 	              dma_buffer_full = 0; // reset flag
 	              send_adc_data = 0;
 	          }
-
+			  //! Make function
 	      /*if (now - last_dma_time >= 100)   // print every 100 ms
 	      {
 	    	  last_dma_time = now;
@@ -644,7 +564,7 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
-/*void process_adc(uint16_t adc_val)
+void process_adc(uint16_t adc_val)
 {
     static uint16_t last_mv = 0;
     uint16_t mv = adc_to_millivolts(adc_val);
@@ -656,7 +576,7 @@ void SystemClock_Config(void)
         usbPrint(buf);
         last_mv = mv;
     }
-}*/
+}
 
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
@@ -671,100 +591,6 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 
     	// 3. Restart ADC in interrupt mode
     	HAL_ADC_Start_IT(hadc);
-
-    	//HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, SET); // Toggle PB9 to measure the sampling of the ADC
-    	//HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, RESET);
-    	/*current_value = HAL_ADC_GetValue(hadc);
-    	float voltage_diff = (current_value * ADC_RAW_TO_VOLTAGE) - SENSOR_ZERO;
-    	measured_current = voltage_diff / MV_PER_AMP;
-
-    	if(autoPhase == PHASE1)
-    	{
-
-    		BTS7960_Forward(100.0f);
-
-    		if(measured_current >= (TARGET_CURRENT - 2.7f))
-    			{
-    		       phase_timer = now;
-    		       autoPhase = PHASE2_HOLD;
-    			}
-    		else if ((HAL_GetTick() - phase_timer) >= 1000)
-    		    {
-    		       autoPhase = PHASE_IDLE;
-    		    }
-    	}
-
-    	if(autoPhase == PHASE2_HOLD)
-    	{
-    		filtered_current += alpha * (measured_current - filtered_current);
-
-    		float error = TARGET_CURRENT - filtered_current;
-
-    		float pwm_unsat = Kp_coil * error + Ki_coil * integral;
-
-    		    if (
-    		        (pwm_unsat < PWM_MAX && pwm_unsat > PWM_MIN) ||
-    		        (pwm_unsat >= PWM_MAX && error < 0) ||
-    		        (pwm_unsat <= PWM_MIN && error > 0)
-    		       )
-    		    {
-    		        integral += error * DT;
-    		    }
-
-    		    pwm_forward = Kp_coil * error + Ki_coil * integral;
-
-    		    BTS7960_Forward(pwm_forward);
-
-    		/*float error = TARGET_CURRENT - measured_current;
-    		pwm_forward += error * 1.0f;
-    		BTS7960_Forward(pwm_forward);*/
-
-    		/*if(last_pwm_forward > 0.0f)
-    		{
-    			BTS7960_Forward(last_pwm_forward);
-    		}
-    		else
-    		{
-    			float error = TARGET_CURRENT - measured_current;
-    			pwm_forward += error * 1.0f;
-    			BTS7960_Forward(pwm_forward);
-    		}*/
-
-    	    /*if(current <= TARGET_CURRENT + HYST_MIN)
-    	    {
-    	    	float error = (TARGET_CURRENT + HYST_MIN) - current;
-        		pwm_forward += error * 1.0f;
-        		__HAL_TIM_SET_COMPARE(&htim1,RPWM_CHANNEL, (uint32_t)((pwm_forward / 100.0f) * PWM_MAX));
-    	    }
-
-    	    if(current >= TARGET_CURRENT + HYST_MAX)
-    	    {
-    	    	float error = (TARGET_CURRENT + HYST_MAX) - current;
-    	    	pwm_forward += error * 1.0f;
-    	        __HAL_TIM_SET_COMPARE(&htim1,RPWM_CHANNEL, (uint32_t)((pwm_forward / 100.0f) * PWM_MAX));
-    	    }*/
-
-    	//}
-
-    	/*if(now - last_dma_time >= dma_interval_ms)
-    	{
-    		last_dma_time = now;
-
-    	/// !!!!!!!THIS IS FOR TESTING THE DMA INTERUPT
-    		for (uint8_t index = 0; index < ADC_BUF_LEN; index++)
-    		{
-    			currentVoltage[index] = ADC_RAW_TO_VOLTAGE * (float) adc_buf[index];
-    			//float voltage_diff = currentVoltage[ADC_BUF_LEN-1] - SENSOR_ZERO;
-    			//measured_current = (voltage_diff * 1000.0f) / MV_PER_AMP;
-
-    			// DMA buffer is completely filled
-    			dma_buffer_full = 1;
-    			HAL_ADC_Stop_DMA(&hadc1);
-    			HAL_ADC_Start_IT(&hadc1);
-    			//HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buf, ADC_BUF_LEN);
-    		}
-
-    	}*/
     }
 }
 
@@ -773,9 +599,6 @@ void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
     // Runs when TIM1 Channel 3 triggers - 20kHz loop
     if (htim->Instance == TIM1 && htim->Channel == HAL_TIM_ACTIVE_CHANNEL_3)
     {
-
-        	//HAL_GPIO_WritePin(GPIOA, GPIO_PIN_15, SET); // Toggle PB9 to measure the sampling of the ADC
-        	//HAL_GPIO_WritePin(GPIOA, GPIO_PIN_15, RESET);
 
             debug_current_value = ADC1->DR;
             float voltage_diff = (debug_current_value * ADC_RAW_TO_VOLTAGE) - SENSOR_ZERO;
@@ -827,6 +650,20 @@ void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
 void HAL_SYSTICK_Callback(void)
 {
 
+}
+
+void DEBUG_FixedPWM(float *error,volatile float *debug_pwm, float measured_current)
+{
+	usbPrint("Starting live current read. Press 'e' to stop.\r\n");
+	process_adc_buffer();
+
+	*error = TARGET_CURRENT - measured_current;
+	*debug_pwm += *error * 50.0f;
+
+	BTS7960_Forward(*debug_pwm);
+
+	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_15, SET);
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_15, RESET);
 }
 
 /* USER CODE END 4 */
