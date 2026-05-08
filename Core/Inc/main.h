@@ -53,6 +53,10 @@ extern "C" {
 void Error_Handler(void);
 
 /* USER CODE BEGIN EFP */
+void usbPrint(const char* msg);
+void BTS7960_Forward(float percent);
+void BTS7960_Stop(void);
+void process_adc_buffer(void);
 
 /* USER CODE END EFP */
 

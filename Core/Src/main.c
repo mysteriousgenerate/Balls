@@ -27,10 +27,13 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "usbd_cdc_if.h"
+#include <stdint.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <stdbool.h>
+#include "debug.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -121,7 +124,7 @@ static uint16_t last_mv = 0;
 volatile uint8_t dma_buffer_full = 0;
 
 // Current sensor
-uint16_t current_value;
+uint16_t raw_adc_current;
 volatile float measured_current = 0.0f;
 
 // State
@@ -143,16 +146,18 @@ volatile uint8_t auto_running = 0;
 
 // Debug options
 volatile uint32_t debug_timer_ms = 0;
+volatile float debug_measured_current = 0.0f;
+float error = 0;
 volatile float debug_pwm = 50.0f;
 uint32_t now;
 uint32_t last_dma_time = 0;
 uint32_t dma_interval_ms = 10000;
 uint32_t dma_interval_max = 11000;
 
-float error = 0;
+
 volatile uint32_t direct_measurement = 0;
-volatile float debug_measured_current = 0.0f;
-uint16_t debug_current_value;
+
+uint16_t debug_raw_adc_current;
 
 // ---- Tunable gains ----
 float Kp_coil = 8.7f;
@@ -169,12 +174,15 @@ float alpha = 0.5f;
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
 
+
+
+/*Extern Parameters BEGIN*/
+
+/*Extern Parameters END*/
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-void DEBUG_FixedPWM(float *error, volatile float *debug_pwm, float measured_current);
-
 /* ---------------- BTS7960 helper functions ---------------- */
 
 /* Stop both PWMs (coast) */
@@ -404,7 +412,7 @@ int main(void)
   while (1)
   {
 	//! New Debug Function:
-    DEBUG_FixedPWM(&error, &debug_pwm, measured_current);
+    DEBUG_FixedPWM(&error, &debug_pwm, measured_current,TARGET_CURRENT);
 	  now = HAL_GetTick();
 
 
@@ -499,6 +507,7 @@ int main(void)
 	              dma_buffer_full = 0; // reset flag
 	              send_adc_data = 0;
 	          }
+            DEBUG_PrintCurrent(now, &last_dma_time, 100, measured_current, raw_adc_current, true);
 			  //! Make function
 	      /*if (now - last_dma_time >= 100)   // print every 100 ms
 	      {
@@ -506,7 +515,7 @@ int main(void)
 
 	          char buf[32];
 	          snprintf(buf, sizeof(buf), "C%.3f\r\n", measured_current);
-	          //snprintf(buf, sizeof(buf), "C%u\r\n", current_value);
+	          //snprintf(buf, sizeof(buf), "C%u\r\n", raw_adc_current);
 	          usbPrint(buf);
 	      }*/
     /* USER CODE END WHILE */
@@ -600,8 +609,8 @@ void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
     if (htim->Instance == TIM1 && htim->Channel == HAL_TIM_ACTIVE_CHANNEL_3)
     {
 
-            debug_current_value = ADC1->DR;
-            float voltage_diff = (debug_current_value * ADC_RAW_TO_VOLTAGE) - SENSOR_ZERO;
+            debug_raw_adc_current = ADC1->DR;
+            float voltage_diff = (debug_raw_adc_current * ADC_RAW_TO_VOLTAGE) - SENSOR_ZERO;
             measured_current = voltage_diff / MV_PER_AMP;
 
             if(autoPhase == PHASE1)
@@ -652,19 +661,6 @@ void HAL_SYSTICK_Callback(void)
 
 }
 
-void DEBUG_FixedPWM(float *error,volatile float *debug_pwm, float measured_current)
-{
-	usbPrint("Starting live current read. Press 'e' to stop.\r\n");
-	process_adc_buffer();
-
-	*error = TARGET_CURRENT - measured_current;
-	*debug_pwm += *error * 50.0f;
-
-	BTS7960_Forward(*debug_pwm);
-
-	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_15, SET);
-    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_15, RESET);
-}
 
 /* USER CODE END 4 */
 
