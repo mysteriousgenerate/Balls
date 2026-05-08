@@ -31,6 +31,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+<<<<<<< Updated upstream
+=======
+#include <stdbool.h>
+#include "debug.h"
+#include "bts7960.h"
+>>>>>>> Stashed changes
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -50,12 +56,19 @@
 #define ADC_MAX 4095
 #define SENSOR_ZERO 1.670f 
 #define MV_PER_AMP 0.185f
+<<<<<<< Updated upstream
 #define TARGET_CURRENT 7.5f
 
 // Note: If you pass percentage (0-100) to BTS7960_Forward, 
 // your PID limits should ideally be 100.0f and 0.0f.
 #define PWM_MAX 100.0f 
 #define PWM_MIN 0.0f
+=======
+#define TARGET_CURRENT 6.4f //5.9f
+#define HYST_MAX 0.8f
+#define HYST_MIN 0.5f
+
+>>>>>>> Stashed changes
 #define DT 0.00005f
 
 #define ADC_RAW_TO_VOLTAGE 0.0008058608f // 3.3 / 4095
@@ -131,6 +144,7 @@ void SystemClock_Config(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+<<<<<<< Updated upstream
 /* Stop both PWMs (coast) */
 void BTS7960_Stop(void)
 {
@@ -165,6 +179,18 @@ void BTS7960_Reverse(float percent)
 
     __HAL_TIM_SET_COMPARE(&htim1, RPWM_CHANNEL, 0);
     __HAL_TIM_SET_COMPARE(&htim1, LPWM_CHANNEL, val);
+=======
+void process_adc_buffer(void)
+{
+	uint16_t raw = adc_buf[ADC_BUF_LEN-1];
+	float voltage = ((float)raw * VREF) / ADC_MAX;
+	measured_current = (voltage - SENSOR_ZERO) * 1000.0f / MV_PER_AMP;
+}
+
+static inline uint16_t adc_to_millivolts(uint16_t adc)
+{
+    return (uint16_t)((adc * 3300UL) / 4095UL);
+>>>>>>> Stashed changes
 }
 
 void usbPrint(const char* msg)
