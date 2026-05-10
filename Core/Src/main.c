@@ -32,8 +32,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include <stdbool.h>
 #include "debug.h"
+#include "bts7960.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -54,11 +54,12 @@
 #define ADC_MAX 4095
 #define SENSOR_ZERO 1.670f //1.360f
 #define MV_PER_AMP 0.185f
-#define TARGET_CURRENT 6.4f //5.9f
+#define TARGET_CURRENT 7.5f
+#define ADC_BUF_LEN 64
+#define PACKET_SIZE 128
 #define HYST_MAX 0.8f
 #define HYST_MIN 0.5f
-#define PWM_MAX 1800U
-#define PWM_MIN 0U
+
 #define DT 0.00005f
 
 #define ADC_BUF_LEN 64
@@ -184,45 +185,6 @@ void SystemClock_Config(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 /* ---------------- BTS7960 helper functions ---------------- */
-
-/* Stop both PWMs (coast) */
-void BTS7960_Stop(void)
-{
-	HAL_GPIO_WritePin(R_EN_PORT, R_EN_PIN, GPIO_PIN_RESET);
-	HAL_GPIO_WritePin(L_EN_PORT, L_EN_PIN, GPIO_PIN_RESET);
-    __HAL_TIM_SET_COMPARE(&htim1, RPWM_CHANNEL, 0);
-    __HAL_TIM_SET_COMPARE(&htim1, LPWM_CHANNEL, 0);
-}
-
-/* Drive forward: RPWM = pwm_percent, LPWM = 0, enable pins high */
-void BTS7960_Forward(float percent)
-{
-    if(percent < 0.0f) percent = 0.0f;
-    if(percent > 100.0f) percent = 100.0f;
-
-    uint32_t val = (uint32_t)((percent / 100.0f) * (float)PWM_MAX);
-
-    HAL_GPIO_WritePin(R_EN_PORT, R_EN_PIN, GPIO_PIN_SET);
-    HAL_GPIO_WritePin(L_EN_PORT, L_EN_PIN, GPIO_PIN_SET);
-
-    __HAL_TIM_SET_COMPARE(&htim1, RPWM_CHANNEL, val);
-    __HAL_TIM_SET_COMPARE(&htim1, LPWM_CHANNEL, 0);
-}
-
-/* Drive reverse: LPWM = pwm_percent, RPWM = 0 */
-void BTS7960_Reverse(float percent)
-{
-    if(percent < 0.0f) percent = 0.0f;
-    if(percent > 100.0f) percent = 100.0f;
-
-    uint32_t val = (uint32_t)((percent / 100.0f) * (float)PWM_MAX);
-
-    HAL_GPIO_WritePin(R_EN_PORT, R_EN_PIN, GPIO_PIN_SET);
-    HAL_GPIO_WritePin(L_EN_PORT, L_EN_PIN, GPIO_PIN_SET);
-
-    __HAL_TIM_SET_COMPARE(&htim1, RPWM_CHANNEL, 0);
-    __HAL_TIM_SET_COMPARE(&htim1, LPWM_CHANNEL, val);
-}
 
 void process_adc_buffer(void)
 {
