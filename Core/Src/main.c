@@ -130,7 +130,6 @@ uint16_t raw_adc_current;
 volatile float measured_current = 0.0f;
 
 // State
-volatile uint8_t mode_auto = 0;
 volatile uint8_t stop_requested = 0;
 uint8_t stopCheck(void);
 void runAutoPhases(void);
@@ -144,7 +143,6 @@ static float pwm_forward = 0.0f;
 static float last_pwm_forward = 0.0f;
 static float pwm_reverse = 0.0f;
 static uint8_t phase_msg_sent = 0; // flag to print USB messages once per phase
-volatile uint8_t auto_running = 0;
 
 // Debug options
 volatile uint32_t debug_timer_ms = 0;
@@ -210,8 +208,6 @@ void usbPrint(const char* msg)
 
 void runAutoStateMachine(void)
 {
-    if (!auto_running) { autoPhase = PHASE_IDLE; return; }
-
     uint32_t now = HAL_GetTick();
     float current = measured_current;
 
@@ -362,8 +358,7 @@ int main(void)
 
   HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
 
-  mode_auto = 1;
-  auto_running = 1;
+
 
   //HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, RESET);
 
@@ -376,9 +371,7 @@ int main(void)
 	//! New Debug Function:
     DEBUG_FixedPWM(&error, &debug_pwm, measured_current,TARGET_CURRENT);
 	// Run auto state machine to drive coil based on measured_current
-	if(mode_auto)
-	    runAutoStateMachine();
-
+	runAutoStateMachine();
 
 	if(dma_buffer_full && send_adc_data)
 	{
@@ -410,7 +403,7 @@ int main(void)
 	}
 
             
-	if(mode_auto && gate_done && auto_running)
+	if(gate_done)
 	{
 	    gate_done = 0;
 	    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);

@@ -1,3 +1,3 @@
-Removed global now variable as it was mostly unused
-    -> Affected functions: main while loop (now is not longer updated)
-    ->
+Removed global now variable as it was mostly unused - 19:42 11/05/2026
+
+Removed mode_auto and auto_running variables as they were unused - 19:47 11/05/2026
