@@ -43,6 +43,7 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 )
 file(GLOB_RECURSE USER_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/user_headers/*.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Core/Src/user_headers/*.cpp"
 )
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE

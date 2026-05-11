@@ -43,6 +43,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define PWM_TIM htim1
 #define RPWM_CHANNEL TIM_CHANNEL_2
 #define LPWM_CHANNEL TIM_CHANNEL_1
 #define R_EN_PIN GPIO_PIN_10
@@ -150,7 +151,6 @@ volatile uint32_t debug_timer_ms = 0;
 volatile float debug_measured_current = 0.0f;
 float error = 0;
 volatile float debug_pwm = 50.0f;
-uint32_t now;
 uint32_t last_dma_time = 0;
 uint32_t dma_interval_ms = 10000;
 uint32_t dma_interval_max = 11000;
@@ -331,34 +331,34 @@ int main(void)
   //HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buf, ADC_BUF_LEN);
 
   // Start PWM main counter
-  HAL_TIM_Base_Start(&htim1);
+  HAL_TIM_Base_Start(&PWM_TIM);
 
   // Start the Light gate timer
   HAL_TIM_Base_Start(&htim2);
 
   //Trigger the ADC when TIM1 counter reaches 2
-  htim1.Instance->CCR3 = 2;
-  //__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, TIM1->ARR / 2); !Needs testing
-
+  PWM_TIM.Instance->CCR3 = 2;
+  //__HAL_TIM_SET_COMPARE(&PWM_TIM, TIM_CHANNEL_3, TIM1->ARR / 2); !Needs testing
+  BTS7960_Init(&PWM_TIM, R_EN_PORT, R_EN_PIN, RPWM_CHANNEL, L_EN_PORT, L_EN_PIN, LPWM_CHANNEL);
   BTS7960_Stop();
 
   // Start PWM on both channels used by BTS7960
-  if (HAL_TIM_PWM_Start(&htim1, RPWM_CHANNEL) != HAL_OK)
+  if (HAL_TIM_PWM_Start(&PWM_TIM, RPWM_CHANNEL) != HAL_OK)
   {
       Error_Handler();
   }
 
-  if (HAL_TIM_PWM_Start(&htim1, LPWM_CHANNEL) != HAL_OK)
+  if (HAL_TIM_PWM_Start(&PWM_TIM, LPWM_CHANNEL) != HAL_OK)
   {
 	  Error_Handler();
   }
 
-  if (HAL_TIM_PWM_Start_IT(&htim1, TIM_CHANNEL_3) != HAL_OK)
+  if (HAL_TIM_PWM_Start_IT(&PWM_TIM, TIM_CHANNEL_3) != HAL_OK)
   {
       Error_Handler();
   }
 
-  //__HAL_TIM_MOE_ENABLE(&htim1);
+  //__HAL_TIM_MOE_ENABLE(&PWM_TIM);
 
   HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
 
@@ -375,111 +375,97 @@ int main(void)
   {
 	//! New Debug Function:
     DEBUG_FixedPWM(&error, &debug_pwm, measured_current,TARGET_CURRENT);
-	  now = HAL_GetTick();
+	// Run auto state machine to drive coil based on measured_current
+	if(mode_auto)
+	    runAutoStateMachine();
 
 
-	          // Check if a ball was detected and start auto trigger
-	          if(mode_auto && gate_done && auto_running)
-	          {
-	              gate_done = 0;
-	              HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
+	if(dma_buffer_full && send_adc_data)
+	{
+	    static char usb_tx_buffer[512];
+	    int usb_tx_length = 0;
 
-	              HAL_ADC_Stop_IT(&hadc1);
-	              HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buf, ADC_BUF_LEN);
+	    for (int sample_index = 0; sample_index < ADC_BUF_LEN; sample_index++)
+	    {
+	        uint16_t millivolts = adc_to_millivolts(adc_buf[sample_index]);
 
-	              ball_speed = 0.0f;
-	              speed_integral = 0.0f;
+	        usb_tx_length += snprintf(&usb_tx_buffer[usb_tx_length],
+	                                  sizeof(usb_tx_buffer) - usb_tx_length,
+	                                  "C%u,", millivolts);
+
+	        if (usb_tx_length >= sizeof(usb_tx_buffer))
+	            break; // prevent overflow
+	    }
+
+	    if (usb_tx_length > 0)
+	    {
+	        usb_tx_buffer[usb_tx_length - 1] = '\r';
+	        usb_tx_buffer[usb_tx_length++] = '\n';
+	    }
+
+	    usbPrint(usb_tx_buffer);
+
+	    dma_buffer_full = 0; // reset flag
+	    send_adc_data = 0;
+	}
+
+            
+	if(mode_auto && gate_done && auto_running)
+	{
+	    gate_done = 0;
+	    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
+
+	    HAL_ADC_Stop_IT(&hadc1);
+	    HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buf, ADC_BUF_LEN);
+
+	    ball_speed = 0.0f;
+	    speed_integral = 0.0f;
 	              speed_error = 0.0f;
 
-	              if(gate_time_us == 0) continue;
+	    if(gate_time_us == 0) continue;
 
-	                  /* ---- Calculate speed ---- */
+	        /* ---- Calculate speed ---- */
 
-	                  float gate_time_s = gate_time_us * 1e-6f;
-	                  ball_speed = GATE_WIDTH_M / gate_time_s;
+	        float gate_time_s = gate_time_us * 1e-6f;
+	        ball_speed = GATE_WIDTH_M / gate_time_s;
 
-	                  /* ---- Calculate travel time to coil ---- */
+	        /* ---- Calculate travel time to coil ---- */
 
-	                  float travel_time_ms = (GATE_TO_COIL_M / ball_speed) * 1000.0f;
+	        float travel_time_ms = (GATE_TO_COIL_M / ball_speed) * 1000.0f;
 
-	                  /* ---- PID timing correction ---- */
-	                  uint32_t now_us = __HAL_TIM_GET_COUNTER(&htim2);
-	                  uint32_t dt_us;
+	        /* ---- PID timing correction ---- */
+	        uint32_t now_us = __HAL_TIM_GET_COUNTER(&htim2);
+	        uint32_t dt_us;
 
-	                  if (now_us >= last_speed_tick)
-	                      dt_us = now_us - last_speed_tick;
-	                  else
-	                      dt_us = (0xFFFF - last_speed_tick) + now_us + 1;
+	        if (now_us >= last_speed_tick)
+	            dt_us = now_us - last_speed_tick;
+	        else
+	            dt_us = (0xFFFF - last_speed_tick) + now_us + 1;
 
-	                  last_speed_tick = now_us;
-	                  float dt_s = dt_us * 1e-6f;
+	        last_speed_tick = now_us;
+	        float dt_s = dt_us * 1e-6f;
 
-	                  speed_error = target_speed - ball_speed;
-	                  speed_integral += speed_error * dt_s;
+	        speed_error = target_speed - ball_speed;
+	        speed_integral += speed_error * dt_s;
 
-	                  float derivative = (speed_error - speed_error_prev) / dt_s;
-	                  speed_error_prev = speed_error;
+	        float derivative = (speed_error - speed_error_prev) / dt_s;
+	        speed_error_prev = speed_error;
 
-	                  float pid_output = (Kp*speed_error + Ki*speed_integral + Kd*derivative);
+	        float pid_output = (Kp*speed_error + Ki*speed_integral + Kd*derivative);
 
-	                  coil_hold_time_ms = (uint32_t)(travel_time_ms + pid_output);
+	        coil_hold_time_ms = (uint32_t)(travel_time_ms + pid_output);
 
-	                  /* ---- Turn coil ON immediately ---- */
-	                  autoPhase = PHASE1;
-	                  phase_timer = HAL_GetTick();
+	        /* ---- Turn coil ON immediately ---- */
+	        autoPhase = PHASE1;
+	        phase_timer = HAL_GetTick();
 
-	              char buf[96];
-	              snprintf(buf, sizeof(buf),
-	              "Pulse_delay=%lu ms | speed=%.2f m/s | speed_error=%f \r\n",
-				  coil_hold_time_ms, ball_speed, speed_error_prev);
-	              usbPrint(buf);
-	          }
-
-
-	          // Run auto state machine to drive coil based on measured_current
-	          if(mode_auto)
-	              runAutoStateMachine();
-
-
-	          if(dma_buffer_full && send_adc_data)
-	          {
-	              static char usb_tx_buffer[512];
-	              int usb_tx_length = 0;
-
-	              for (int sample_index = 0; sample_index < ADC_BUF_LEN; sample_index++)
-	              {
-	                  uint16_t millivolts = adc_to_millivolts(adc_buf[sample_index]);
-
-	                  usb_tx_length += snprintf(&usb_tx_buffer[usb_tx_length],
-	                                            sizeof(usb_tx_buffer) - usb_tx_length,
-	                                            "C%u,", millivolts);
-
-	                  if (usb_tx_length >= sizeof(usb_tx_buffer))
-	                      break; // prevent overflow
-	              }
-
-	              if (usb_tx_length > 0)
-	              {
-	                  usb_tx_buffer[usb_tx_length - 1] = '\r';
-	                  usb_tx_buffer[usb_tx_length++] = '\n';
-	              }
-
-	              usbPrint(usb_tx_buffer);
-
-	              dma_buffer_full = 0; // reset flag
-	              send_adc_data = 0;
-	          }
-            DEBUG_PrintCurrent(now, &last_dma_time, 100, measured_current, raw_adc_current, true);
-			  //! Make function
-	      /*if (now - last_dma_time >= 100)   // print every 100 ms
-	      {
-	    	  last_dma_time = now;
-
-	          char buf[32];
-	          snprintf(buf, sizeof(buf), "C%.3f\r\n", measured_current);
-	          //snprintf(buf, sizeof(buf), "C%u\r\n", raw_adc_current);
-	          usbPrint(buf);
-	      }*/
+	    char buf[96];
+	    snprintf(buf, sizeof(buf),
+	    "Pulse_delay=%lu ms | speed=%.2f m/s | speed_error=%f \r\n",
+	  coil_hold_time_ms, ball_speed, speed_error_prev);
+	   usbPrint(buf);
+	}
+    DEBUG_PrintCurrent(HAL_GetTick(), &last_dma_time, 100, measured_current, raw_adc_current, true);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -582,7 +568,7 @@ void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
 
                 		if(measured_current >= (TARGET_CURRENT - 2.7f))
                 			{
-                		       phase_timer = now;
+                		       phase_timer = HAL_GetTick();
                 		       autoPhase = PHASE2_HOLD;
                 			}
                 		else if ((HAL_GetTick() - phase_timer) >= 1000)
